@@ -8,35 +8,32 @@ import kotlinx.coroutines.withContext
 
 object DownloadEngine {
 
-    // We use a 'suspend' function because network requests take time
-    // and we don't want to freeze the app's user interface.
-    suspend fun fetchVideoFormats(videoUrl: String) = withContext(Dispatchers.IO) {
+    // Now returns a List of Strings (e.g., ["1080p", "720p", "Audio Only"])
+    suspend fun fetchVideoFormats(videoUrl: String): List<String> = withContext(Dispatchers.IO) {
+        val uniqueResolutions = mutableSetOf<Int>()
+
         try {
-            Log.d("PikuFormat", "🔄 Fetching formats for: $videoUrl")
-
-            // Create a request for the specific video URL
             val request = YoutubeDLRequest(videoUrl)
-
-            // This flag makes the extraction much faster
             request.addOption("--flat-playlist")
 
-            // Ask yt-dlp to extract the video data (this automatically parses the JSON for us!)
             val info = YoutubeDL.getInstance().getInfo(request)
 
-            Log.d("PikuFormat", "✅ Video Title: ${info.title}")
-
-            // Look through the available formats and print the MP4 video options
-            val formats = info.formats
-            if (formats != null) {
-                for (format in formats) {
-                    // We only care about valid MP4 video formats for this test
-                    if (format.height > 0 && format.ext == "mp4") {
-                        Log.d("PikuFormat", "📺 Found Format: ${format.height}p | Codec: ${format.vcodec}")
-                    }
+            info.formats?.forEach { format ->
+                // Only grab MP4s with actual video data
+                if (format.height > 0 && format.ext == "mp4") {
+                    uniqueResolutions.add(format.height)
                 }
             }
         } catch (e: Exception) {
             Log.e("PikuFormat", "🔴 Failed to fetch formats", e)
         }
+
+        // Sort from highest quality to lowest, add "p", and add an Audio option
+        val displayList = uniqueResolutions.sortedDescending().map { "${it}p" }.toMutableList()
+        if (displayList.isNotEmpty()) {
+            displayList.add("Audio Only")
+        }
+
+        return@withContext displayList
     }
 }
