@@ -13,6 +13,15 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        //Global Crash Handler
+        Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
+            com.piku.videodownloader.storage.PikuLogger.logError(
+                applicationContext,
+                "FATAL_CRASH",
+                "Uncaught application crash occurred",
+                throwable
+            )
+        }
 
         // Initialize the yt-dlp engine in a background thread so it doesn't freeze the app
         lifecycleScope.launch(Dispatchers.IO) {

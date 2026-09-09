@@ -56,6 +56,15 @@ class DownloadWorker(private val context: Context, workerParams: WorkerParameter
             Result.success()
 
         } catch (e: Exception) {
+
+            // Log the error to your public Downloads/Piku/piku_error_log.txt file!
+            com.piku.videodownloader.storage.PikuLogger.logError(
+                context,
+                "DOWNLOAD_WORKER",
+                "Background download failed for URL: $url",
+                e
+            )
+
             val failedNotification = NotificationCompat.Builder(context, channelId)
                 .setContentTitle("Piku Download Failed")
                 .setContentText("Something went wrong.")

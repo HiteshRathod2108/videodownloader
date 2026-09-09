@@ -1,9 +1,13 @@
 package com.piku.videodownloader.ui
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.os.Build
 import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -11,17 +15,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.piku.videodownloader.browser.YoutubeWebViewClient
-import com.piku.videodownloader.downloader.DownloadEngine
-import kotlinx.coroutines.launch
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.piku.videodownloader.background.DownloadWorker
+import com.piku.videodownloader.browser.YoutubeWebViewClient
+import com.piku.videodownloader.downloader.DownloadEngine
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
@@ -30,8 +30,10 @@ fun BrowserScreen() {
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    // Reference to the WebView so we can control its back history
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
+
+    // NEW: Compose state for the back button
+    var canGoBack by remember { mutableStateOf(false) }
 
     var currentUrl by remember { mutableStateOf("") }
     var isVideoPage by remember { mutableStateOf(false) }
@@ -49,8 +51,8 @@ fun BrowserScreen() {
         }
     }
 
-    // THE FIX: Handle the Android Hardware Back Button safely
-    BackHandler(enabled = webViewRef?.canGoBack() == true) {
+    // THE FIX: Only trap the back button if the WebView actually has history
+    BackHandler(enabled = canGoBack) {
         webViewRef?.goBack()
     }
 
@@ -81,20 +83,21 @@ fun BrowserScreen() {
             modifier = Modifier.fillMaxSize().padding(innerPadding),
             factory = { ctx ->
                 WebView(ctx).apply {
-                    webViewRef = this // Save the reference for the BackHandler
+                    webViewRef = this
 
-                    // SECURITY HARDENING
                     settings.apply {
                         javaScriptEnabled = true
-                        domStorageEnabled = true // Required for YouTube to load properly
-                        allowFileAccess = false // Prevent local file stealing attacks
-                        mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW // Force HTTPS
+                        domStorageEnabled = true
+                        allowFileAccess = false
+                        mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                     }
 
-                    webViewClient = YoutubeWebViewClient { url, isVideo ->
+                    // Pass the backAvailable state up to Compose!
+                    webViewClient = YoutubeWebViewClient { url, isVideo, backAvailable ->
                         if (url != currentUrl) { availableQualities = emptyList() }
                         currentUrl = url
                         isVideoPage = isVideo
+                        canGoBack = backAvailable // This triggers the BackHandler to enable/disable
                     }
                     loadUrl("https://m.youtube.com")
                 }
