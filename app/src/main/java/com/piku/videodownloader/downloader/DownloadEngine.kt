@@ -38,11 +38,14 @@ object DownloadEngine {
         return@withContext displayList
     }
 
-    suspend fun executeDownload(videoUrl: String, selectedQuality: String, context: Context) = withContext(Dispatchers.IO) {
+    suspend fun executeDownload(
+        videoUrl: String,
+        selectedQuality: String,
+        context: Context,
+        onProgress: (Float, Long) -> Unit
+    ) = withContext(Dispatchers.IO) {
         try {
             val request = YoutubeDLRequest(videoUrl)
-
-            // THE FIX: Ignore playlists during the actual download too
             request.addOption("--no-playlist")
 
             if (selectedQuality == "Audio Only") {
@@ -60,16 +63,19 @@ object DownloadEngine {
 
             Log.d("PikuDownload", "⏳ Starting download to: $cachePath")
 
+            // UPDATE THIS EXECUTION BLOCK
             YoutubeDL.getInstance().execute(request, "PikuDownloadTask") { progress, etaInSeconds, _ ->
                 Log.d("PikuDownload", "⬇️ Downloading: $progress% | ETA: $etaInSeconds sec")
+                // Send the progress back up to the notification!
+                onProgress(progress, etaInSeconds)
             }
 
             Log.d("PikuDownload", "✅ Download and Muxing Complete!")
-
             com.piku.videodownloader.storage.MediaStoreExporter.exportLatestVideo(context)
 
         } catch (e: Exception) {
             Log.e("PikuDownload", "🔴 Download Failed", e)
+            throw e // Throw it so WorkManager knows it failed
         }
     }
 }

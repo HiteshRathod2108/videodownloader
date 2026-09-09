@@ -66,4 +66,5 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(libs.youtubedl.android)
     implementation(libs.youtubedl.ffmpeg)
+    implementation(libs.androidx.work.runtime.ktx)
 }

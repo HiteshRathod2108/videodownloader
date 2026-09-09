@@ -12,6 +12,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.piku.videodownloader.browser.YoutubeWebViewClient
 import com.piku.videodownloader.downloader.DownloadEngine
 import kotlinx.coroutines.launch
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.piku.videodownloader.background.DownloadWorker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
@@ -19,6 +27,16 @@ import kotlinx.coroutines.launch
 fun BrowserScreen() {
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { /* Permission granted or denied */ }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     // UI State Memory
     var currentUrl by remember { mutableStateOf("") }
@@ -102,14 +120,22 @@ fun BrowserScreen() {
                         Button(
                             onClick = {
                                 showBottomSheet = false
-                                // Launch the actual download in the background!
-                                coroutineScope.launch {
-                                    DownloadEngine.executeDownload(currentUrl, quality, context)
-                                }
+
+                                // Create the data bundle to pass to the Worker
+                                val downloadData = Data.Builder()
+                                    .putString("url", currentUrl)
+                                    .putString("quality", quality)
+                                    .build()
+
+                                // Create a WorkManager Request
+                                val downloadRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
+                                    .setInputData(downloadData)
+                                    .build()
+
+                                // Enqueue the download in the Android OS
+                                WorkManager.getInstance(context).enqueue(downloadRequest)
                             },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                         ) {
                             Text(quality)
                         }
