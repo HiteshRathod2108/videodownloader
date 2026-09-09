@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun BrowserScreen() {
     val coroutineScope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     // UI State Memory
     var currentUrl by remember { mutableStateOf("") }
@@ -57,8 +58,8 @@ fun BrowserScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-            factory = { context ->
-                WebView(context).apply {
+            factory = { ctx ->
+                WebView(ctx).apply {
                     settings.javaScriptEnabled = true
                     webViewClient = YoutubeWebViewClient { url, isVideo ->
                         // If the user clicked a NEW video, reset the qualities list
@@ -100,8 +101,11 @@ fun BrowserScreen() {
                     availableQualities.forEach { quality ->
                         Button(
                             onClick = {
-                                // Phase 6 will go here!
                                 showBottomSheet = false
+                                // Launch the actual download in the background!
+                                coroutineScope.launch {
+                                    DownloadEngine.executeDownload(currentUrl, quality, context)
+                                }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
