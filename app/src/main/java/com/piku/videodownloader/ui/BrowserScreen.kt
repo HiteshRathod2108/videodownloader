@@ -1,7 +1,9 @@
 package com.piku.videodownloader.ui
 
 import android.annotation.SuppressLint
+import android.webkit.WebSettings
 import android.webkit.WebView
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,9 +30,18 @@ fun BrowserScreen() {
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    // Reference to the WebView so we can control its back history
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+
+    var currentUrl by remember { mutableStateOf("") }
+    var isVideoPage by remember { mutableStateOf(false) }
+    var showBottomSheet by remember { mutableStateOf(false) }
+    var isFetching by remember { mutableStateOf(false) }
+    var availableQualities by remember { mutableStateOf<List<String>>(emptyList()) }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) { /* Permission granted or denied */ }
+    ) { }
 
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -38,23 +49,18 @@ fun BrowserScreen() {
         }
     }
 
-    // UI State Memory
-    var currentUrl by remember { mutableStateOf("") }
-    var isVideoPage by remember { mutableStateOf(false) }
-
-    var showBottomSheet by remember { mutableStateOf(false) }
-    var isFetching by remember { mutableStateOf(false) }
-    var availableQualities by remember { mutableStateOf<List<String>>(emptyList()) }
+    // THE FIX: Handle the Android Hardware Back Button safely
+    BackHandler(enabled = webViewRef?.canGoBack() == true) {
+        webViewRef?.goBack()
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        // 1. The Floating Action Button (Only shows on video pages)
         floatingActionButton = {
             if (isVideoPage) {
                 ExtendedFloatingActionButton(
                     onClick = {
                         showBottomSheet = true
-                        // Only fetch if we haven't fetched for this specific video yet
                         if (availableQualities.isEmpty()) {
                             isFetching = true
                             coroutineScope.launch {
@@ -71,19 +77,22 @@ fun BrowserScreen() {
         }
     ) { innerPadding ->
 
-        // 2. The YouTube Browser
         AndroidView(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
             factory = { ctx ->
                 WebView(ctx).apply {
-                    settings.javaScriptEnabled = true
+                    webViewRef = this // Save the reference for the BackHandler
+
+                    // SECURITY HARDENING
+                    settings.apply {
+                        javaScriptEnabled = true
+                        domStorageEnabled = true // Required for YouTube to load properly
+                        allowFileAccess = false // Prevent local file stealing attacks
+                        mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW // Force HTTPS
+                    }
+
                     webViewClient = YoutubeWebViewClient { url, isVideo ->
-                        // If the user clicked a NEW video, reset the qualities list
-                        if (url != currentUrl) {
-                            availableQualities = emptyList()
-                        }
+                        if (url != currentUrl) { availableQualities = emptyList() }
                         currentUrl = url
                         isVideoPage = isVideo
                     }
@@ -93,46 +102,31 @@ fun BrowserScreen() {
         )
     }
 
-    // 3. The Bottom Sheet Menu
     if (showBottomSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showBottomSheet = false }
-        ) {
+        ModalBottomSheet(onDismissRequest = { showBottomSheet = false }) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .padding(bottom = 32.dp),
+                modifier = Modifier.fillMaxWidth().padding(16.dp).padding(bottom = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "Choose Quality",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+                Text("Choose Quality", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 16.dp))
 
                 if (isFetching) {
                     CircularProgressIndicator(modifier = Modifier.padding(16.dp))
                     Text("Finding best streams...")
                 } else {
-                    // Display the cleaned-up list of buttons
                     availableQualities.forEach { quality ->
                         Button(
                             onClick = {
                                 showBottomSheet = false
-
-                                // Create the data bundle to pass to the Worker
                                 val downloadData = Data.Builder()
                                     .putString("url", currentUrl)
                                     .putString("quality", quality)
                                     .build()
 
-                                // Create a WorkManager Request
                                 val downloadRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
                                     .setInputData(downloadData)
                                     .build()
 
-                                // Enqueue the download in the Android OS
                                 WorkManager.getInstance(context).enqueue(downloadRequest)
                             },
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
