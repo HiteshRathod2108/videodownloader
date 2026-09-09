@@ -6,7 +6,7 @@ plugins {
 android {
     namespace = "com.piku.videodownloader"
     compileSdk {
-        version = release(36) {
+        version = release(37) {
             minorApiLevel = 1
         }
     }
@@ -14,7 +14,8 @@ android {
     defaultConfig {
         applicationId = "com.piku.videodownloader"
         minSdk = 29
-        targetSdk = 36
+        //noinspection EditedTargetSdkVersion
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
 
@@ -22,6 +23,12 @@ android {
 
         ndk {
             abiFilters += "arm64-v8a"
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 
@@ -57,4 +64,5 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    implementation(libs.youtubedl.android)
 }
